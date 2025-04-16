@@ -6,20 +6,21 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 public class StudentManagementFrame extends JFrame {
-
     private JTextField textFieldStudentID, textFieldName, textFieldAge, textFieldSearch;
     private JComboBox<String> comboBoxMajor;
     private JLabel labelSubject1, labelSubject2, labelSubject3;
     private JTextField textFieldScore1, textFieldScore2, textFieldScore3;
-    private JButton btnAdd, btnEdit, btnDelete, btnSearch;
+    private JButton btnAdd, btnEdit, btnDelete, btnSearch, btnSort, btnSave;
     private JTable table;
     private DefaultTableModel tableModel;
     private ArrayList<Student> students = new ArrayList<>();
     private DecimalFormat df = new DecimalFormat("#.##");
+    private boolean ascending = true;
+    private int selectedIndex = -1; // để lưu chỉ số sinh viên đang chọn để sửa
 
     public StudentManagementFrame() {
         setTitle("Student Management");
-        setSize(850, 650);
+        setSize(900, 750);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(null);
         getContentPane().setBackground(new Color(245, 255, 250));
@@ -96,10 +97,20 @@ public class StudentManagementFrame extends JFrame {
         btnEdit.setBackground(new Color(255, 228, 181));
         add(btnEdit);
 
+        btnSave = new JButton("Save");
+        btnSave.setBounds(500, 100, 100, 25);
+        btnSave.setBackground(new Color(255, 215, 0));
+        add(btnSave);
+
         btnDelete = new JButton("Delete");
-        btnDelete.setBounds(500, 100, 100, 25);
+        btnDelete.setBounds(620, 20, 100, 25);
         btnDelete.setBackground(new Color(255, 160, 122));
         add(btnDelete);
+
+        btnSort = new JButton("Sort ▲");
+        btnSort.setBounds(620, 60, 100, 25);
+        btnSort.setBackground(new Color(173, 216, 230));
+        add(btnSort);
 
         JLabel labelSearch = new JLabel("Search:");
         labelSearch.setBounds(20, 190, 80, 25);
@@ -119,6 +130,7 @@ public class StudentManagementFrame extends JFrame {
 
         DefaultTableCellRenderer numberRenderer = new DefaultTableCellRenderer() {
             private DecimalFormat df = new DecimalFormat("#.##");
+
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
                 if (value instanceof Number) {
                     value = df.format(((Number) value).doubleValue());
@@ -129,17 +141,30 @@ public class StudentManagementFrame extends JFrame {
         table.getColumnModel().getColumn(4).setCellRenderer(numberRenderer);
 
         JScrollPane scrollPane = new JScrollPane(table);
-        scrollPane.setBounds(20, 230, 780, 350);
+        scrollPane.setBounds(20, 230, 830, 450);
         add(scrollPane);
 
         comboBoxMajor.addActionListener(e -> updateSubjects());
         btnAdd.addActionListener(e -> addStudent());
-        btnEdit.addActionListener(e -> editStudent());
+        btnEdit.addActionListener(e -> {
+            selectedIndex = table.getSelectedRow();
+            if (selectedIndex == -1) {
+                JOptionPane.showMessageDialog(this, "Please select a student to edit!");
+            }
+        });
+        btnSave.addActionListener(e -> saveEditStudent());
         btnDelete.addActionListener(e -> deleteStudent());
         btnSearch.addActionListener(e -> searchStudent());
+        btnSort.addActionListener(e -> {
+            ascending = !ascending;
+            btnSort.setText(ascending ? "Sort ▲" : "Sort ▼");
+            sortStudentsByAverage();
+            updateTable();
+        });
 
         table.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent e) {
+                selectedIndex = table.getSelectedRow();
                 loadStudentFromTable();
             }
         });
@@ -171,16 +196,10 @@ public class StudentManagementFrame extends JFrame {
         textFieldScore3.setText("");
     }
 
-    private void bubbleSortByAverage() {
-        for (int i = 0; i < students.size() - 1; i++) {
-            for (int j = 0; j < students.size() - i - 1; j++) {
-                if (students.get(j).getAverage() < students.get(j + 1).getAverage()) {
-                    Student temp = students.get(j);
-                    students.set(j, students.get(j + 1));
-                    students.set(j + 1, temp);
-                }
-            }
-        }
+    private void sortStudentsByAverage() {
+        students.sort((s1, s2) -> ascending ?
+                Double.compare(s1.getAverage(), s2.getAverage()) :
+                Double.compare(s2.getAverage(), s1.getAverage()));
     }
 
     private void addStudent() {
@@ -198,23 +217,20 @@ public class StudentManagementFrame extends JFrame {
             String rank = getRank(avg);
 
             students.add(new Student(id, name, age, major, score1, score2, score3, avg, rank));
-            bubbleSortByAverage();
             updateTable();
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Please enter valid numbers!", "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    private void editStudent() {
-        int selectedRow = table.getSelectedRow();
-        if (selectedRow == -1) {
-            JOptionPane.showMessageDialog(this, "Please select a student to edit!");
+    private void saveEditStudent() {
+        if (selectedIndex == -1) {
+            JOptionPane.showMessageDialog(this, "No student selected to save!");
             return;
         }
-        try {
-            int modelIndex = selectedRow;
-            Student s = students.get(modelIndex);
 
+        try {
+            Student s = students.get(selectedIndex);
             s.setId(textFieldStudentID.getText().trim());
             s.setName(textFieldName.getText().trim());
             s.setAge(Integer.parseInt(textFieldAge.getText().trim()));
@@ -227,8 +243,8 @@ public class StudentManagementFrame extends JFrame {
             avg = Double.parseDouble(df.format(avg));
             s.setAverage(avg);
             s.setRank(getRank(avg));
-            bubbleSortByAverage();
             updateTable();
+            JOptionPane.showMessageDialog(this, "Saved successfully!");
         } catch (NumberFormatException ex) {
             JOptionPane.showMessageDialog(this, "Invalid input!");
         }
@@ -246,13 +262,13 @@ public class StudentManagementFrame extends JFrame {
 
     private void searchStudent() {
         String keyword = textFieldSearch.getText().trim().toLowerCase();
-        tableModel.setRowCount(0); // Clear table
+        tableModel.setRowCount(0);
 
         for (Student s : students) {
             if (s.getId().toLowerCase().contains(keyword) ||
                 s.getName().toLowerCase().contains(keyword)) {
                 tableModel.addRow(new Object[]{
-                    s.getId(), s.getName(), s.getAge(), s.getMajor(), s.getAverage(), s.getRank()
+                        s.getId(), s.getName(), s.getAge(), s.getMajor(), s.getAverage(), s.getRank()
                 });
             }
         }
@@ -262,7 +278,7 @@ public class StudentManagementFrame extends JFrame {
         tableModel.setRowCount(0);
         for (Student s : students) {
             tableModel.addRow(new Object[]{
-                s.getId(), s.getName(), s.getAge(), s.getMajor(), s.getAverage(), s.getRank()
+                    s.getId(), s.getName(), s.getAge(), s.getMajor(), s.getAverage(), s.getRank()
             });
         }
     }
@@ -301,27 +317,41 @@ class Student {
     private double score1, score2, score3, average;
 
     public Student(String id, String name, int age, String major, double score1, double score2, double score3, double average, String rank) {
-        this.id = id; this.name = name; this.age = age; this.major = major;
-        this.score1 = score1; this.score2 = score2; this.score3 = score3;
-        this.average = average; this.rank = rank;
+        this.id = id;
+        this.name = name;
+        this.age = age;
+        this.major = major;
+        this.score1 = score1;
+        this.score2 = score2;
+        this.score3 = score3;
+        this.average = average;
+        this.rank = rank;
     }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
     public int getAge() { return age; }
     public void setAge(int age) { this.age = age; }
+
     public String getMajor() { return major; }
     public void setMajor(String major) { this.major = major; }
+
     public double getScore1() { return score1; }
     public void setScore1(double score1) { this.score1 = score1; }
+
     public double getScore2() { return score2; }
     public void setScore2(double score2) { this.score2 = score2; }
+
     public double getScore3() { return score3; }
     public void setScore3(double score3) { this.score3 = score3; }
+
     public double getAverage() { return average; }
     public void setAverage(double average) { this.average = average; }
+
     public String getRank() { return rank; }
     public void setRank(String rank) { this.rank = rank; }
 }
